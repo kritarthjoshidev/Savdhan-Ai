@@ -1,0 +1,20 @@
+{
+  "start_time": "2026-09-01T21:43:51.634288",
+  "status": "failed",
+  "steps": {
+    "frame_extraction": {
+      "timestamp": "2026-09-01T21:50:54.721595",
+      "message": "Extracted 575 frames and auto-labeled with 5 classes"
+    },
+    "data_yaml_generation": {
+      "timestamp": "2026-09-01T21:50:54.762593",
+      "message": "Generating data.yaml..."
+    },
+    "model_training": {
+      "timestamp": "2026-09-01T21:50:54.766595",
+      "message": "Starting YOLO training for 15 epochs..."
+    }
+  },
+  "error": "Invalid CUDA 'device=0' requested. Use 'device=cpu' or pass valid CUDA device(s) if available, i.e. 'device=0' or 'device=0,1,2,3' for Multi-GPU.\n\ntorch.cuda.is_available(): False\ntorch.cuda.device_count(): 0\nos.environ['CUDA_VISIBLE_DEVICES']: None\nSee https://pytorch.org/get-started/locally/ for up-to-date torch install instructions if no CUDA devices are seen by torch.\n",
+  "end_time": "2026-09-01T21:50:57.462007"
+}

@@ -1,0 +1,15 @@
+[submodule "external/a-ai"]
+	path = external/a-ai
+	url = https://github.com/rudra-sah00/A-AI.git
+[submodule "external/deepcamera"]
+	path = external/deepcamera
+	url = https://github.com/SharpAI/DeepCamera.git
+[submodule "external/motion-detection-alert-system"]
+	path = external/motion-detection-alert-system
+	url = https://github.com/whitehatboy005/Motion-Detection-Alert-System-for-CCTV.git
+[submodule "external/my-projects"]
+	path = external/my-projects
+	url = https://github.com/sara22za/my-projects.git
+[submodule "external/reidentification-fr"]
+	path = external/reidentification-fr
+	url = https://github.com/Morteza-Asadi-Shalmaiy/Re-Identification-fr.git

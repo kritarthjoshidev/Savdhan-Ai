@@ -1,0 +1,10 @@
+names:
+  0: person
+  1: motorcycle
+  2: weapon
+  3: helmet
+  4: car
+nc: 5
+path: C:\Users\krita\Downloads\sawdhan ai\backend\auto_train_output\f898b5d3\dataset
+train: images/train
+val: images/train

@@ -31,8 +31,7 @@ training_jobs/
 *.zip
 *.tar.gz
 
-# External reference repositories are cloned via scripts/clone_external_repos.ps1
-external/
+# External reference repositories are tracked as Git submodules.
 
 # Editor and OS files
 .vscode/
