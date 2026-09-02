@@ -1,0 +1,40 @@
+# Local runtimes and dependencies
+.venv/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Downloaded model weights and generated ML data
+weights/
+backend/weights/
+*.pt
+*.onnx
+*.engine
+backend/auto_train_output/
+backend/runs/
+backend/data/
+backend/training_jobs/
+training_jobs/
+
+# Local databases, logs, and generated archives
+*.db
+*.db-journal
+*.log
+*.zip
+*.tar.gz
+
+# External reference repositories are cloned via scripts/clone_external_repos.ps1
+external/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
