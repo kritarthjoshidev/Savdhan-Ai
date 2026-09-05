@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
-import { listIncidents, updateIncident } from '../utils/api';
+import { Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { listIncidents } from '../utils/api';
 import { useToast } from '../components/Toast';
 import IncidentTable from '../components/IncidentTable';
 import IncidentDetailDrawer from '../components/IncidentDetailDrawer';
@@ -44,10 +44,10 @@ export default function Incidents() {
   useEffect(() => {
     alertSocket.connect();
     const unsub = alertSocket.subscribe((msg) => {
-      if (msg.event === 'INTRUSION') {
+      if (['INTRUSION', 'BORDER_INTRUSION', 'TRAFFIC_ACCIDENT'].includes(msg.event)) {
         setIntrusionAlerts(prev => [{ ...msg, _ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 5));
         load(); // refresh table
-      } else if (msg.event === 'new_incident' || msg.event === 'incident_updated') {
+      } else if (msg.event === 'new_incident' || msg.event === 'incident_updated' || msg.event === 'incident_evidence_ready') {
         load();
       }
     });
@@ -55,34 +55,6 @@ export default function Incidents() {
   }, [load]);
 
   // ── Confirmed update — only mutates local state after successful PATCH ──────
-  const handleVerify = async (id) => {
-    try {
-      const updated = await updateIncident(id, {
-        status: 'verified',
-        meta: { reviewer_note: 'Reviewed by operator' },
-      });
-      toast('Incident verified', 'success');
-      setIncidents(prev => prev.map(i => i.id === id ? { ...i, status: 'verified' } : i));
-      if (selected?.id === id) setSelected(null);
-    } catch (e) {
-      toast(`Failed to verify: ${e.message}`, 'error');
-    }
-  };
-
-  const handleReject = async (id) => {
-    try {
-      await updateIncident(id, {
-        status: 'rejected',
-        meta: { reviewer_note: 'Reviewed by operator' },
-      });
-      toast('Incident rejected', 'warning');
-      setIncidents(prev => prev.map(i => i.id === id ? { ...i, status: 'rejected' } : i));
-      if (selected?.id === id) setSelected(null);
-    } catch (e) {
-      toast(`Failed to reject: ${e.message}`, 'error');
-    }
-  };
-
   // Confirmed update from drawer
   const handleDrawerUpdate = (updated) => {
     setIncidents(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i));
@@ -106,7 +78,7 @@ export default function Incidents() {
 
       <div className="page-header">
         <h1>Incidents</h1>
-        <p>Manage and review INTRUSION detections across all sources</p>
+        <p>Manage and review AI-classified border-intrusion and traffic-accident incidents</p>
       </div>
 
       {/* Filters */}
@@ -162,8 +134,6 @@ export default function Incidents() {
           incidents={incidents}
           loading={loading}
           onView={setSelected}
-          onVerify={handleVerify}
-          onReject={handleReject}
         />
       </motion.div>
 

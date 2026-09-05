@@ -8,7 +8,7 @@ from typing import Set
 from app.core.config import settings
 from app.core.events import connect_alert_client, disconnect_alert_client
 from app.db.database import init_db
-from app.api.routes import border, incidents, models, live_detection
+from app.api.routes import border, cameras, incidents, media, models, live_detection
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -83,6 +83,8 @@ app.include_router(
     tags=["live_detection"]
 )
 app.include_router(border.router, prefix=settings.API_V1_STR)
+app.include_router(cameras.router, prefix=settings.API_V1_STR)
+app.include_router(media.router, prefix=settings.API_V1_STR)
 
 # Health check
 @app.get("/health")

@@ -1,6 +1,9 @@
 import boto3
 import io
 import logging
+import os
+import re
+import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
 import cv2
@@ -8,6 +11,52 @@ import numpy as np
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_segment(value: str) -> str:
+    """Make a camera / artifact name safe to use as one storage path segment."""
+    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(value)).strip("._") or "unknown"
+
+
+def _encode_mp4(frames: list[np.ndarray], fps: float) -> bytes:
+    """Encode a short, browser-friendly evidence clip without keeping a file."""
+    usable = [frame for frame in frames if frame is not None and frame.size]
+    if not usable:
+        raise ValueError("Cannot encode an evidence clip without frames")
+
+    height, width = usable[0].shape[:2]
+    # Keep clips light enough for a laptop demo and for WebSocket/API clients.
+    if width > 960:
+        scale = 960 / width
+        width = 960
+        height = max(2, int(height * scale) // 2 * 2)
+    width = max(2, width // 2 * 2)
+    height = max(2, height // 2 * 2)
+
+    fd, temp_name = tempfile.mkstemp(suffix=".mp4")
+    os.close(fd)
+    try:
+        writer = cv2.VideoWriter(
+            temp_name,
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            max(1.0, float(fps)),
+            (width, height),
+        )
+        if not writer.isOpened():
+            raise RuntimeError("OpenCV could not create the evidence video")
+        for frame in usable:
+            resized = cv2.resize(frame, (width, height))
+            writer.write(resized)
+        writer.release()
+        data = Path(temp_name).read_bytes()
+        if not data:
+            raise RuntimeError("Evidence video encoding produced an empty file")
+        return data
+    finally:
+        try:
+            Path(temp_name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 class LocalStorage:
@@ -39,6 +88,37 @@ class LocalStorage:
         destination.write_bytes(video_data)
         return key.as_posix()
 
+    def save_evidence_frame(
+        self, cam_id: str, incident_id: int, label: str, frame: np.ndarray
+    ) -> str:
+        if frame is None or frame.size == 0:
+            raise ValueError("Cannot save an empty evidence frame")
+        key = (
+            Path("evidence")
+            / _safe_segment(cam_id)
+            / str(incident_id)
+            / f"{_safe_segment(label)}.jpg"
+        )
+        destination = self.root / key
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not cv2.imwrite(str(destination), frame):
+            raise RuntimeError("Failed to save evidence frame locally")
+        return key.as_posix()
+
+    def save_evidence_clip(
+        self, cam_id: str, incident_id: int, frames: list[np.ndarray], fps: float
+    ) -> str:
+        key = (
+            Path("evidence")
+            / _safe_segment(cam_id)
+            / str(incident_id)
+            / "context.mp4"
+        )
+        destination = self.root / key
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(_encode_mp4(frames, fps))
+        return key.as_posix()
+
     def save_artifact(self, data: bytes, key: str) -> str:
         destination = self.root / key
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -46,7 +126,17 @@ class LocalStorage:
         return key
 
     def get_object_url(self, key: str) -> str:
-        return str((self.root / key).resolve())
+        return str(self.get_local_path(key))
+
+    def get_local_path(self, key: str) -> Path:
+        """Resolve a stored key without allowing path traversal outside data/."""
+        relative = Path(key)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("Invalid storage key")
+        resolved = (self.root / relative).resolve()
+        if self.root.resolve() not in resolved.parents:
+            raise ValueError("Invalid storage key")
+        return resolved
 
     def delete_object(self, key: str) -> bool:
         destination = self.root / key
@@ -162,6 +252,38 @@ class MinIOStorage:
         except Exception as e:
             logger.error(f"Failed to save video: {e}")
             raise
+
+    def save_evidence_frame(
+        self, cam_id: str, incident_id: int, label: str, frame: np.ndarray
+    ) -> str:
+        if frame is None or frame.size == 0:
+            raise ValueError("Cannot save an empty evidence frame")
+        success, buffer = cv2.imencode(".jpg", frame)
+        if not success:
+            raise RuntimeError("Failed to encode evidence frame")
+        key = (
+            f"evidence/{_safe_segment(cam_id)}/{incident_id}/"
+            f"{_safe_segment(label)}.jpg"
+        )
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=io.BytesIO(buffer.tobytes()),
+            ContentType="image/jpeg",
+        )
+        return key
+
+    def save_evidence_clip(
+        self, cam_id: str, incident_id: int, frames: list[np.ndarray], fps: float
+    ) -> str:
+        key = f"evidence/{_safe_segment(cam_id)}/{incident_id}/context.mp4"
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=io.BytesIO(_encode_mp4(frames, fps)),
+            ContentType="video/mp4",
+        )
+        return key
 
     def save_artifact(self, data: bytes, key: str) -> str:
         """

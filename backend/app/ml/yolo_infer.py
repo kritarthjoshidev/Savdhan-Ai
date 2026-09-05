@@ -8,6 +8,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_BORDER_CLASSES = ["person", "vehicle", "weapon", "backpack"]
+TRAFFIC_CLASSES = ["person", "car", "truck", "bus", "motorcycle", "bicycle"]
+AUTO_CLASSES = list(dict.fromkeys(DEFAULT_BORDER_CLASSES + TRAFFIC_CLASSES))
 
 
 class YOLOInference:
@@ -35,18 +37,24 @@ class YOLOInference:
             self.model = YOLO(str(resolved_path))
             self.confidence_threshold = 0.35
             self.image_size = image_size
-            self.classes = classes or DEFAULT_BORDER_CLASSES
-            if hasattr(self.model, "set_classes"):
-                self.model.set_classes(self.classes)
+            self.classes = []
+            self.set_classes(classes or DEFAULT_BORDER_CLASSES)
             logger.info("Loaded border model %s with classes: %s", resolved_path, self.classes)
         except Exception as e:
             logger.error(f"Failed to load YOLO model: {e}")
             raise
 
+    def set_classes(self, classes: List[str]) -> None:
+        """Switch YOLO-World prompts for the active surveillance profile."""
+        self.classes = list(dict.fromkeys(classes))
+        if hasattr(self.model, "set_classes"):
+            self.model.set_classes(self.classes)
+
     def process_frame(
         self,
         frame: np.ndarray,
-        conf_threshold: float = 0.35
+        conf_threshold: float = 0.35,
+        track: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Run inference on a single frame
@@ -59,12 +67,22 @@ class YOLOInference:
             List of detections with bbox, confidence, class
         """
         try:
-            results = self.model(
-                frame,
-                conf=conf_threshold,
-                imgsz=self.image_size,
-                verbose=False,
-            )
+            inference_args = {
+                "conf": conf_threshold,
+                "imgsz": self.image_size,
+                "verbose": False,
+            }
+            if track:
+                # ByteTrack is bundled with Ultralytics. Its persistent IDs are
+                # preferred for tripwires; centroid matching remains a fallback.
+                results = self.model.track(
+                    frame,
+                    persist=True,
+                    tracker="bytetrack.yaml",
+                    **inference_args,
+                )
+            else:
+                results = self.model(frame, **inference_args)
             detections = []
             
             for r in results:
@@ -82,6 +100,8 @@ class YOLOInference:
                             "class": cls,
                             "class_name": cls_name
                         }
+                        if getattr(box, "id", None) is not None:
+                            detection["track_id"] = f"bytetrack-{int(box.id[0])}"
                         detections.append(detection)
             
             return detections

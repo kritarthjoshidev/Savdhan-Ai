@@ -58,6 +58,18 @@ def update_incident_status(
         db.refresh(incident)
     return incident
 
+
+def update_incident_meta(
+    db: Session, incident_id: int, meta_update: dict
+) -> Optional[Incident]:
+    """Merge additional pipeline data without changing the review status."""
+    incident = get_incident(db, incident_id)
+    if incident:
+        incident.meta = {**(incident.meta or {}), **meta_update}
+        db.commit()
+        db.refresh(incident)
+    return incident
+
 # TrainJob CRUD
 def create_train_job(db: Session, config: dict, status: str = "queued") -> TrainJob:
     """Create a new training job"""

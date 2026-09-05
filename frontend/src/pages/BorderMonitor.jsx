@@ -7,15 +7,17 @@ import {
 import { processBorderSource, listIncidents } from '../utils/api';
 import { useToast } from '../components/Toast';
 import BorderFencePreview from '../components/BorderFencePreview';
-import { IntrusionBadge, StatusBadge } from '../components/StatusBadge';
+import { EventBadge, StatusBadge } from '../components/StatusBadge';
 
 const INITIAL_FORM = {
   sourceType: 'file',
   source: '',
   camera_id: 'border-cam-01',
+  analysis_mode: 'border',
   confidence_threshold: 0.35,
   sample_every_n_frames: 30,
   fence_y_ratio: 0.5,
+  accident_threshold: 0.52,
 };
 
 function FormRow({ label, hint, children }) {
@@ -82,9 +84,11 @@ export default function BorderMonitor() {
       source:                 form.source.trim(),
       source_type:            form.sourceType,
       camera_id:              form.camera_id.trim(),
+      analysis_mode:          form.analysis_mode,
       confidence_threshold:   Number(form.confidence_threshold),
       sample_every_n_frames:  Number(form.sample_every_n_frames),
       fence_y_ratio:          Number(form.fence_y_ratio),
+      accident_threshold:     Number(form.accident_threshold),
     };
 
     try {
@@ -109,7 +113,7 @@ export default function BorderMonitor() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}>
       <div className="page-header">
         <h1>Border Monitor</h1>
-        <p>Submit a video file or RTSP stream for YOLO-World + virtual fence analysis</p>
+        <p>Classify traffic accidents or directional border intrusions with human-review evidence</p>
       </div>
 
       <div className="grid-2" style={{ alignItems: 'start' }}>
@@ -122,6 +126,13 @@ export default function BorderMonitor() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate>
+            <FormRow label="Incident Profile" hint="Traffic uses crash-scene analysis. Border requires a real directional tripwire crossing.">
+              <select className="select" value={form.analysis_mode} onChange={e => set('analysis_mode', e.target.value)} aria-label="Incident analysis profile">
+                <option value="border">Border intrusion — virtual fence</option>
+                <option value="traffic">Traffic accident — crash scene</option>
+                <option value="auto">Auto — choose from scene context</option>
+              </select>
+            </FormRow>
             {/* Source type toggle */}
             <FormRow label="Source Type">
               <div className="toggle-row" role="group" aria-label="Source type">
@@ -215,7 +226,7 @@ export default function BorderMonitor() {
             </FormRow>
 
             {/* Fence Y ratio */}
-            <FormRow
+            {form.analysis_mode !== 'traffic' && <FormRow
               label={`Virtual Fence Position: ${Number(form.fence_y_ratio).toFixed(2)}`}
               hint={`0.50 = midway down the frame. ${Number(form.fence_y_ratio).toFixed(2)} = ${Math.round(form.fence_y_ratio * 100)}% from top.`}
             >
@@ -229,7 +240,15 @@ export default function BorderMonitor() {
                 aria-valuenow={form.fence_y_ratio}
               />
               <div className="slider-labels"><span>0.05 (top)</span><span>0.95 (bottom)</span></div>
-            </FormRow>
+            </FormRow>}
+
+            {form.analysis_mode !== 'border' && <FormRow
+              label={`Accident Confidence: ${Number(form.accident_threshold).toFixed(2)}`}
+              hint="Two consecutive scene checks above this score create one TRAFFIC ACCIDENT event."
+            >
+              <input type="range" min={0.35} max={0.9} step={0.01} className="slider" value={form.accident_threshold} onChange={e => set('accident_threshold', e.target.value)} aria-label="Accident confidence threshold" />
+              <div className="slider-labels"><span>0.35 (sensitive)</span><span>0.90 (strict)</span></div>
+            </FormRow>}
 
             {/* Error */}
             <AnimatePresence>
@@ -272,8 +291,8 @@ export default function BorderMonitor() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.82rem' }}>
                   <div><span className="text-muted">Camera ID</span><p className="mono">{accepted.camera_id}</p></div>
-                  <div><span className="text-muted">Event Type</span><p className="mono" style={{ color: '#ef4444' }}>{accepted.event_on_crossing}</p></div>
-                  <div><span className="text-muted">Fence Y Ratio</span><p className="mono">{accepted.fence_y_ratio}</p></div>
+                  <div><span className="text-muted">Profile</span><p className="mono" style={{ color: '#ef4444' }}>{accepted.analysis_mode}</p></div>
+                  <div><span className="text-muted">Possible events</span><p className="mono">{accepted.possible_events?.join(', ')}</p></div>
                   <div><span className="text-muted">Sample Interval</span><p className="mono">{accepted.sample_every_n_frames} frames</p></div>
                 </div>
                 <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: 10 }}>
@@ -303,7 +322,8 @@ export default function BorderMonitor() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {newIncidents.map(inc => {
-                    const isIntrusion = inc.meta?.event_type === 'INTRUSION';
+                    const eventType = inc.meta?.event_type;
+                    const isIntrusion = ['INTRUSION', 'BORDER_INTRUSION'].includes(String(eventType || '').toUpperCase());
                     return (
                       <motion.div
                         key={inc.id}
@@ -311,7 +331,7 @@ export default function BorderMonitor() {
                         initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                       >
                         <span className="mono text-accent text-sm">#{inc.id}</span>
-                        {isIntrusion && <IntrusionBadge />}
+                        <EventBadge eventType={eventType} />
                         <StatusBadge status={inc.status} />
                         <span className="text-muted text-sm">
                           {(inc.confidence * 100).toFixed(0)}%

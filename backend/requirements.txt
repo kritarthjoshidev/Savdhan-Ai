@@ -23,9 +23,9 @@ boto3>=1.28.0
 opencv-python>=4.8.0
 numpy>=1.24.0
 ultralytics>=8.0.0
-# Required by YOLO-World custom text prompts.  Use the source ZIP so Windows
-# setups do not need Git merely to install this dependency.
-clip @ https://github.com/ultralytics/CLIP/archive/refs/heads/main.zip
+# OpenAI CLIP zero-shot scene classifier used for accident/border semantics.
+# Use the source ZIP so Windows setups do not need Git during installation.
+clip @ https://github.com/openai/CLIP/archive/refs/heads/main.zip
 torchreid==0.2.5
 gdown>=6.1.0
 tensorboard>=2.21.0

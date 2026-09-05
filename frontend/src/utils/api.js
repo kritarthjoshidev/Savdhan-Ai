@@ -1,5 +1,5 @@
 // ─── Shared API config — single source of truth ──────────────────────────────
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 export const API_V1 = `${API_BASE}/api/v1`;
 
 // ─── Internal fetch wrapper ───────────────────────────────────────────────────
@@ -51,15 +51,50 @@ export const updateIncident = (id, data) =>
 export const getIncidentSnapshots = (id) =>
   request(`${API_V1}/incidents/${id}/snapshots`);
 
+export const getIncidentEvidence = (id) =>
+  request(`${API_V1}/incidents/${id}/evidence`);
+
+// ─── Registered cameras ──────────────────────────────────────────────────
+export const listCameras = () => request(`${API_V1}/cameras/`);
+
+export const testCamera = (stream_url) =>
+  request(`${API_V1}/cameras/test`, {
+    method: 'POST',
+    body: JSON.stringify({ stream_url }),
+  });
+
+export const addCamera = (payload) =>
+  request(`${API_V1}/cameras/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const startCamera = (cameraId, payload = {}) =>
+  request(`${API_V1}/cameras/${encodeURIComponent(cameraId)}/start`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const stopCamera = (cameraId) =>
+  request(`${API_V1}/cameras/${encodeURIComponent(cameraId)}/stop`, { method: 'POST' });
+
+export const deleteCamera = (cameraId) =>
+  request(`${API_V1}/cameras/${encodeURIComponent(cameraId)}`, { method: 'DELETE' });
+
+export const cameraStreamUrl = (cameraId) =>
+  `${API_BASE.replace(/^http/, 'ws')}/api/v1/live/camera/stream?camera_id=${encodeURIComponent(cameraId)}`;
+
 // ─── Border pipeline ──────────────────────────────────────────────────────────
 /**
  * @param {{
  *   source: string,
  *   source_type: 'file'|'rtsp',
  *   camera_id: string,
+ *   analysis_mode: 'border'|'traffic'|'auto',
  *   confidence_threshold: number,
  *   sample_every_n_frames: number,
- *   fence_y_ratio: number
+ *   fence_y_ratio: number,
+ *   accident_threshold: number
  * }} payload
  */
 export const processBorderSource = (payload) =>

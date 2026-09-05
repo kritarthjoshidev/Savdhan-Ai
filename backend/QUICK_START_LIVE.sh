@@ -103,5 +103,5 @@ echo ""
 
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
-echo -e "${GREEN}🎉 شروع کریں! Happy Detecting!${NC}"
+echo -e "${GREEN}🎉 شروhappy Detecting!${NC}"
 echo ""

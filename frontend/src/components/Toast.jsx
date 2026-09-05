@@ -93,6 +93,8 @@ export function IntrusionAlertBar({ alerts = [], onDismiss }) {
   if (alerts.length === 0) return null;
 
   const latest = alerts[0];
+  const isTrafficAccident = latest.event === 'TRAFFIC_ACCIDENT';
+  const title = isTrafficAccident ? 'TRAFFIC ACCIDENT' : 'BORDER INTRUSION';
 
   return (
     <motion.div
@@ -102,11 +104,11 @@ export function IntrusionAlertBar({ alerts = [], onDismiss }) {
       exit={{ y: -60, opacity: 0 }}
       role="alert"
       aria-live="assertive"
-      aria-label="INTRUSION detected"
+      aria-label={`${title} detected`}
     >
       <ShieldAlert size={18} aria-hidden="true" />
       <span className="intrusion-alert-text">
-        <strong>INTRUSION</strong> — camera{' '}
+        <strong>{title}</strong> — camera{' '}
         <code>{latest.source_cam}</code>,&nbsp;
         confidence {latest.confidence != null ? `${(latest.confidence * 100).toFixed(0)}%` : '—'}
         {latest.track_id ? `, track ${latest.track_id}` : ''}

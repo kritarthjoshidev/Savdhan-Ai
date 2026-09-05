@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
-import { Eye, CheckCircle2, XCircle } from 'lucide-react';
-import { StatusBadge, IntrusionBadge } from './StatusBadge';
+import { Eye } from 'lucide-react';
+import { EventBadge, StatusBadge } from './StatusBadge';
 
 /**
  * IncidentTable — reusable table for incident listings.
@@ -11,7 +11,7 @@ import { StatusBadge, IntrusionBadge } from './StatusBadge';
  *   onVerify: (id) => void
  *   onReject: (id) => void
  */
-export default function IncidentTable({ incidents, loading, onView, onVerify, onReject }) {
+export default function IncidentTable({ incidents, loading, onView }) {
   return (
     <div className="table-container" role="region" aria-label="Incidents table">
       <table className="data-table">
@@ -49,7 +49,9 @@ export default function IncidentTable({ incidents, loading, onView, onVerify, on
             </tr>
           ) : (
             incidents.map((inc, i) => {
-              const isIntrusion = inc.meta?.event_type === 'INTRUSION';
+              const eventType = inc.meta?.event_type;
+              const normalizedEventType = String(eventType || '').toUpperCase();
+              const isIntrusion = normalizedEventType === 'BORDER_INTRUSION' || normalizedEventType === 'INTRUSION';
               const pct = inc.confidence != null ? `${(inc.confidence * 100).toFixed(0)}%` : '—';
               const confCls = inc.confidence >= 0.85 ? 'high' : inc.confidence >= 0.6 ? 'medium' : 'low';
               return (
@@ -66,9 +68,7 @@ export default function IncidentTable({ incidents, loading, onView, onVerify, on
                     {new Date(inc.timestamp || inc.created_at).toLocaleString()}
                   </td>
                   <td>
-                    {isIntrusion
-                      ? <IntrusionBadge />
-                      : <span className="text-muted text-sm">Detection</span>}
+                    <EventBadge eventType={eventType} />
                   </td>
                   <td><StatusBadge status={inc.status} /></td>
                   <td><span className={`confidence ${confCls}`}>{pct}</span></td>
@@ -78,31 +78,11 @@ export default function IncidentTable({ incidents, loading, onView, onVerify, on
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => onView && onView(inc)}
-                        title="View details"
-                        aria-label={`View incident #${inc.id}`}
+                        title="Review evidence"
+                        aria-label={`Review evidence for incident #${inc.id}`}
                       >
-                        <Eye size={13} />
+                        <Eye size={13} /> Review
                       </button>
-                      {inc.status === 'pending' && (
-                        <>
-                          <button
-                            className="btn btn-success btn-sm"
-                            onClick={() => onVerify && onVerify(inc.id)}
-                            title="Verify"
-                            aria-label={`Verify incident #${inc.id}`}
-                          >
-                            <CheckCircle2 size={13} />
-                          </button>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => onReject && onReject(inc.id)}
-                            title="Reject"
-                            aria-label={`Reject incident #${inc.id}`}
-                          >
-                            <XCircle size={13} />
-                          </button>
-                        </>
-                      )}
                     </div>
                   </td>
                 </motion.tr>

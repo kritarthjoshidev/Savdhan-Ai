@@ -10,8 +10,10 @@ import base64
 from typing import Optional, Dict
 from pathlib import Path
 import json
+import asyncio
 
 from app.services.live_detector import LiveDetector
+from app.services.camera_manager import CameraManager, get_camera_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/live", tags=["live_detection"])
@@ -158,6 +160,12 @@ async def detect_from_rtsp(request: RTSPDetectionRequest):
         }
     """
     detector = get_live_detector()
+    try:
+        CameraManager.validate_url(request.rtsp_url)
+        if not request.rtsp_url.strip().lower().startswith("rtsp://"):
+            raise ValueError("This endpoint requires an rtsp:// URL")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not detector or not detector.model:
         raise HTTPException(status_code=500, detail="Model not initialized")
     
@@ -191,8 +199,14 @@ async def test_rtsp_connection(rtsp_url: str = Query(..., description="RTSP URL 
         POST /api/v1/live/rtsp/test?rtsp_url=rtsp://admin:password@192.168.1.100:554/stream
     """
     try:
+        CameraManager.validate_url(rtsp_url)
+        if not rtsp_url.strip().lower().startswith("rtsp://"):
+            raise ValueError("This endpoint requires an rtsp:// URL")
+        CameraManager.check_rtsp_endpoint(rtsp_url)
         cap = cv2.VideoCapture(rtsp_url)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+        cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
         
         # Try to read first frame
         connected = False
@@ -221,6 +235,8 @@ async def test_rtsp_connection(rtsp_url: str = Query(..., description="RTSP URL 
             "message": "Could not connect to RTSP stream"
         }
     
+    except (ValueError, ConnectionError) as e:
+        return {"status": "invalid", "message": str(e)}
     except Exception as e:
         logger.error(f"RTSP test error: {e}")
         return {
@@ -300,6 +316,57 @@ class ConnectionManager:
 
 
 live_stream_manager = ConnectionManager()
+
+
+def _frame_payload(detector, frame, frame_count: int) -> dict:
+    """Run inference and make one compact JPEG payload for browser live view."""
+    results = detector.infer_frame(frame, conf_threshold=0.35)
+    detections = []
+    for box in results[0].boxes:
+        cls_id = int(box.cls[0])
+        detections.append({
+            "class": detector.model.names[cls_id],
+            "confidence": round(float(box.conf[0]), 3),
+            "bbox": [round(value, 1) for value in box.xyxy[0].tolist()],
+        })
+    annotated = results[0].plot()
+    height, width = annotated.shape[:2]
+    if width > 960:
+        scale = 960 / width
+        annotated = cv2.resize(annotated, (960, max(2, int(height * scale))))
+    encoded, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 78])
+    if not encoded:
+        raise RuntimeError("Could not encode live camera frame")
+    return {
+        "type": "frame",
+        "frame": frame_count,
+        "detections": detections,
+        "frame_jpeg": base64.b64encode(jpeg.tobytes()).decode("ascii"),
+    }
+
+
+async def _stream_capture(websocket: WebSocket, cap, detector, source_label: str) -> None:
+    """Send annotated preview frames and detection metadata on one websocket."""
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0)
+    await websocket.send_json({
+        "type": "stream_info",
+        "resolution": f"{width}x{height}",
+        "fps": round(fps, 1),
+        "status": "streaming",
+        "source": source_label,
+    })
+    frame_count = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            await websocket.send_json({"type": "stream_end", "reason": "camera_disconnected"})
+            return
+        frame_count += 1
+        await websocket.send_json(_frame_payload(detector, frame, frame_count))
+        # Yield to disconnect / ping handling between CPU-heavy inferences.
+        await asyncio.sleep(0)
 
 
 @router.websocket("/webcam/stream")
@@ -413,6 +480,16 @@ async def websocket_rtsp_stream(websocket: WebSocket, rtsp_url: str = Query(...)
     Receives JSON messages with detections in real-time
     """
     await live_stream_manager.connect(websocket)
+
+    try:
+        CameraManager.validate_url(rtsp_url)
+        if not rtsp_url.strip().lower().startswith("rtsp://"):
+            raise ValueError("This endpoint requires an rtsp:// URL")
+        CameraManager.check_rtsp_endpoint(rtsp_url)
+    except (ValueError, ConnectionError) as exc:
+        await websocket.send_json({"type": "error", "error": str(exc)})
+        await live_stream_manager.disconnect(websocket)
+        return
     
     detector = get_live_detector()
     if not detector or not detector.model:
@@ -483,12 +560,17 @@ async def websocket_rtsp_stream(websocket: WebSocket, rtsp_url: str = Query(...)
                 })
                 detection_count += 1
             
-            # Send detection data
+            # Send an annotated browser-preview frame plus detection data.
+            annotated = results[0].plot()
+            encoded, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 78])
+            if not encoded:
+                continue
             await websocket.send_json({
-                "type": "detection",
+                "type": "frame",
                 "frame": frame_count,
                 "detections": detections,
-                "detection_count": len(detections)
+                "detection_count": len(detections),
+                "frame_jpeg": base64.b64encode(jpeg.tobytes()).decode("ascii"),
             })
         
         cap.release()
@@ -509,3 +591,36 @@ async def websocket_rtsp_stream(websocket: WebSocket, rtsp_url: str = Query(...)
         except:
             pass
         await live_stream_manager.disconnect(websocket)
+
+
+@router.websocket("/camera/stream")
+async def websocket_registered_camera_stream(websocket: WebSocket, camera_id: str = Query(...)):
+    """Preview a registered phone/CCTV camera without exposing its URL to React."""
+    await websocket.accept()
+    cap = None
+    try:
+        camera = get_camera_manager().get(camera_id)
+        if not camera:
+            await websocket.send_json({"type": "error", "error": "Camera not found"})
+            return
+        detector = get_live_detector()
+        if not detector or not detector.model:
+            await websocket.send_json({"type": "error", "error": "Model not initialized"})
+            return
+        cap = cv2.VideoCapture(camera["stream_url"])
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        if not cap.isOpened():
+            await websocket.send_json({"type": "error", "error": "Could not open this camera stream"})
+            return
+        await _stream_capture(websocket, cap, detector, camera["name"])
+    except WebSocketDisconnect:
+        logger.info("Camera-preview client disconnected: %s", camera_id)
+    except Exception as exc:
+        logger.exception("Camera-preview error for %s", camera_id)
+        try:
+            await websocket.send_json({"type": "error", "error": str(exc)})
+        except Exception:
+            pass
+    finally:
+        if cap is not None:
+            cap.release()

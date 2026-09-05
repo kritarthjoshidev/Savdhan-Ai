@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import Sidebar from './components/Sidebar';
 import { ToastProvider } from './components/Toast';
@@ -31,7 +31,7 @@ function AnimatedRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ToastProvider>
         <div className="app-layout">
           <Sidebar />
@@ -40,6 +40,6 @@ export default function App() {
           </main>
         </div>
       </ToastProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

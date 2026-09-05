@@ -46,3 +46,15 @@ npm install
 
 See [backend/START_HERE.md](backend/START_HERE.md) for backend setup and
 [SHARE_WITH_PARTNER.md](SHARE_WITH_PARTNER.md) for the full sharing notes.
+
+## Review evidence and live phone cameras
+
+Every named incident (`BORDER_INTRUSION` or `TRAFFIC_ACCIDENT`) captures an
+annotated detection image, nearby frames, and a short context clip. Review
+these directly in **Incidents** before verifying or rejecting an alert; no
+manual local-file navigation is required.
+
+To use an Android phone as a CCTV source, follow
+[backend/PHONE_CAMERA_SETUP.md](backend/PHONE_CAMERA_SETUP.md). The **Live
+Camera Command** page tests, saves, previews, and starts the protected camera.
+Choose its Border, Traffic, or Auto profile before pressing **Protect**.

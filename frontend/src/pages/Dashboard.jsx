@@ -14,7 +14,7 @@ import alertSocket from '../utils/ws';
 import ConnectionStatus from '../components/ConnectionStatus';
 import MetricCard from '../components/MetricCard';
 import EmptyState from '../components/EmptyState';
-import { IntrusionBadge, StatusBadge } from '../components/StatusBadge';
+import { EventBadge, StatusBadge } from '../components/StatusBadge';
 import { IntrusionAlertBar } from '../components/Toast';
 
 const stagger = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
@@ -66,7 +66,7 @@ export default function Dashboard() {
       setLiveAlerts([...alertsRef.current]);
 
       // INTRUSION prominently shown
-      if (msg.event === 'INTRUSION') {
+      if (['INTRUSION', 'BORDER_INTRUSION', 'TRAFFIC_ACCIDENT'].includes(msg.event)) {
         intrusionRef.current = [entry, ...intrusionRef.current].slice(0, 5);
         setIntrusionAlerts([...intrusionRef.current]);
         // Refresh incident data
@@ -226,15 +226,15 @@ export default function Dashboard() {
               liveAlerts.map((a, i) => (
                 <motion.div
                   key={i}
-                  className={`alert-item${i === 0 ? ' new' : ''}${a.event === 'INTRUSION' ? ' alert-intrusion' : ''}`}
+                  className={`alert-item${i === 0 ? ' new' : ''}${a.event === 'INTRUSION' || a.event === 'BORDER_INTRUSION' ? ' alert-intrusion' : ''}`}
                   initial={{ x: -16, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   transition={{ delay: i * 0.02 }}
                 >
                   <span className="alert-time">{a._ts}</span>
                   <span className="alert-msg">
-                    {a.event === 'INTRUSION' && (
-                      <><IntrusionBadge />{' '}cam <span className="alert-cam">{a.source_cam}</span> — {a.confidence != null ? `${(a.confidence * 100).toFixed(0)}%` : ''}</>
+                    {['INTRUSION', 'BORDER_INTRUSION', 'TRAFFIC_ACCIDENT'].includes(a.event) && (
+                      <><EventBadge eventType={a.event} />{' '}cam <span className="alert-cam">{a.source_cam}</span> — {a.confidence != null ? `${(a.confidence * 100).toFixed(0)}%` : ''}</>
                     )}
                     {a.event === 'new_incident' && (
                       <>New detection on <span className="alert-cam">{a.source_cam}</span> — {a.confidence != null ? `${(a.confidence * 100).toFixed(0)}%` : ''}</>
@@ -330,7 +330,8 @@ export default function Dashboard() {
                 </td></tr>
               ) : (
                 recent.map((inc, i) => {
-                  const isIntrusion = inc.meta?.event_type === 'INTRUSION';
+                  const eventType = inc.meta?.event_type;
+                  const isIntrusion = ['INTRUSION', 'BORDER_INTRUSION'].includes(String(eventType || '').toUpperCase());
                   return (
                     <motion.tr
                       key={inc.id}
@@ -344,7 +345,7 @@ export default function Dashboard() {
                       <td className="text-muted text-sm mono">
                         {new Date(inc.timestamp || inc.created_at).toLocaleString()}
                       </td>
-                      <td>{isIntrusion ? <IntrusionBadge /> : <span className="text-muted text-sm">Detection</span>}</td>
+                      <td><EventBadge eventType={eventType} /></td>
                       <td><StatusBadge status={inc.status} /></td>
                       <td>
                         <span className={`confidence ${inc.confidence >= 0.85 ? 'high' : inc.confidence >= 0.6 ? 'medium' : 'low'}`}>

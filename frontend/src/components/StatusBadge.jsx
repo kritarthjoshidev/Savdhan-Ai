@@ -22,3 +22,21 @@ export function IntrusionBadge() {
     </span>
   );
 }
+
+export function EventBadge({ eventType }) {
+  const normalizedEventType = String(eventType || '').toUpperCase();
+  if (normalizedEventType === 'BORDER_INTRUSION' || normalizedEventType === 'INTRUSION') {
+    return <IntrusionBadge />;
+  }
+  if (normalizedEventType === 'TRAFFIC_ACCIDENT') {
+    return (
+      <span className="event-badge accident" role="status" aria-label="Traffic accident suspected">
+        ⚠ TRAFFIC ACCIDENT
+      </span>
+    );
+  }
+  const fallbackLabel = normalizedEventType
+    ? normalizedEventType.replaceAll('_', ' ')
+    : 'Unclassified event';
+  return <span className="event-badge" role="status" aria-label={fallbackLabel}>{fallbackLabel}</span>;
+}
